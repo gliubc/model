@@ -1,0 +1,185 @@
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Convert JSON to Swift Model</title>
+</head>
+
+<body>
+    <textarea id="jsonContent" rows="24" cols="80" placeholder="JSON"></textarea>
+    <br />
+    <br />
+    <input type="text" id="modelPrefix" placeholder="Model Prefix" />
+    <input type="text" id="modelPostfix" placeholder="Model Postfix" />
+    <button onclick="convert()">Convert</button>
+    <br />
+    <br />
+    <textarea id="modelContent" rows="24" cols="80" placeholder=""></textarea>
+
+    <script>
+        function convert() {
+            var jsonContent = document.getElementById('jsonContent').value;
+            var modelPrefix = document.getElementById('modelPrefix').value;
+            var modelPostfix = document.getElementById('modelPostfix').value;
+
+            try {
+                var json = JSON.parse(jsonContent);
+            } catch (error) {
+                alert(error);
+                document.getElementById('modelContent').value = '';
+                return;
+            }
+
+            var nodeTree = buildNodeTree('', json);
+            var classes = [];
+
+            walkNodeTree(nodeTree, function (node) {
+                if (node.type === 'object' || (node.type === 'array' && node.nodes.length > 0)) {
+                    var className = createClassName(modelPrefix, node.name, modelPostfix);
+                    var _class = classes.find((item) => item.name === className);
+                    if (_class === undefined) {
+                        _class = {
+                            name: className,
+                            properties: []
+                        };
+                        classes.push(_class);
+                    }
+
+                    for (var subNode of node.nodes) {
+                        if (!_class.properties.find((item) => item.name === subNode.name)) {
+                            _class.properties.push({
+                                name: subNode.name,
+                                type: subNode.type
+                            });
+                        }
+                    }
+                }
+            });
+
+            var content = '';
+            for (var _class of classes) {
+                content += 'class ' + _class.name + ': Codable {\n';
+                for (var property of _class.properties) {
+                    content += '    var ' + property.name + ': ';
+                    switch (property.type) {
+                    case 'array':
+                        var className = createClassName(modelPrefix, property.name, modelPostfix);
+                        if (classes.find((item) => item.name === className)) {
+                            content += '[' + className + ']';
+                        } else {
+                            content += '[String]';
+                        }
+                        break;
+                    case 'object':
+                        content += createClassName(modelPrefix, property.name, modelPostfix);
+                        break;
+                    case 'null':
+                        content += 'String';
+                        break;
+                    case 'boolean':
+                        content += 'Bool';
+                        break;
+                    case 'integer':
+                        content += 'Int';
+                        break;
+                    case 'float':
+                        content += 'Float';
+                        break;
+                    case 'string':
+                        content += 'String';
+                        break;
+                    }
+                    content += '\n';
+
+                }
+                content += '}\n\n';
+            }
+            document.getElementById('modelContent').value = content;
+        }
+
+        function isInt(n) {
+            return n % 1 === 0;
+        }
+
+        function _typeof(obj) {
+            var type = typeof obj;
+            if (type === 'object') {
+                if (obj === null) {
+                    return 'null';
+                } else if (Array.isArray(obj)) {
+                    return 'array';
+                } else {
+                    return type;
+                }
+            }
+
+            if (type === 'number') {
+                return isInt(obj) ? 'integer' : 'float';
+            }
+
+            return type;
+        }
+
+        function createClassName(prefix, name, postfix) {
+            return prefix + capitalizeFirstLetter(camelCase(name)).replace(/(list|lst|array|arr)$/i, '') + postfix || 'Model';
+        }
+
+
+        function capitalizeFirstLetter(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+
+        function camelCase(str) { 
+            return str.replace(/_(.)/g, function(match, group1) {
+                return group1.toUpperCase();
+            });
+        }
+
+        function buildNodeTree(name, json) {
+            var type = _typeof(json);
+            var node = {
+                name: name,
+                type: type,
+                nodes: [],
+            };
+            switch (type) {
+                case 'object':
+                    for (var key in json) {
+                        if (json.hasOwnProperty(key)) {
+                            node.nodes.push(buildNodeTree(key, json[key]));
+                        } 
+                    }
+                    break;
+                case 'array':
+                    for (var item of json) {
+                        if (_typeof(item) !== 'object') {
+                            break;
+                        }
+
+                        for (var key in item) {
+                            if (item.hasOwnProperty(key)) {
+                                node.nodes.push(buildNodeTree(key, item[key]));
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    break;
+            }
+
+            return node;
+        }
+
+        function walkNodeTree(tree, callback) {
+            if (!tree) {
+                return;
+            }
+            callback(tree);
+            for (var node of tree.nodes) {
+                walkNodeTree(node, callback);
+            }
+        }
+    </script>
+</body>
+
+</html>
